@@ -2,7 +2,8 @@ package save
 
 import (
 	"encoding/binary"
-	"os"
+	"io"
+	"strings"
 )
 
 // Makes it clearer that a field is just padding.
@@ -18,10 +19,23 @@ type vector3 struct {
 	X, Y, Z float32
 }
 
-func mustRead(file *os.File, data interface{}) {
+func mustRead(file io.Reader, data interface{}) {
 	err := binary.Read(file, binary.LittleEndian, data)
 
 	if err != nil {
 		panic(err)
 	}
+}
+
+func mustWrite(file io.Writer, data interface{}) {
+	err := binary.Write(file, binary.LittleEndian, data)
+
+	if err != nil {
+		panic(err)
+	}
+}
+
+func nullTerminate(str *string) {
+	index := strings.IndexRune(*str, '\x00')
+	*str = (*str)[:index]
 }

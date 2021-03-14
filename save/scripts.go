@@ -1,6 +1,9 @@
 package save
 
-import "os"
+import (
+	"io"
+	"os"
+)
 
 type scriptAttachType int8
 
@@ -136,6 +139,7 @@ func readScript(file *os.File) script {
 	file.Read(nameBytes)
 
 	theScript.Name = string(nameBytes)
+	nullTerminate(&theScript.Name)
 
 	mustRead(file, &theScript.Execution)
 
@@ -226,6 +230,52 @@ type scriptBlock struct {
 	// There is more to the block, but we don't need any of it.
 }
 
+func WriteScriptBlock(file io.Writer, block *scriptBlock) {
+	mustWrite(file, block.blockIdentifier)
+	mustWrite(file, block.GlobalStorage.GlobalSpaceSize)
+	mustWrite(file, block.GlobalStorage.Globals)
+
+	for _, theBrain := range block.Brains {
+		mustWrite(file, theBrain.General)
+
+		if theBrain.General.AttachType == attachBrainForCodeUse || theBrain.General.AttachType == attachAttractorScript {
+			mustWrite(file, ([]byte)(theBrain.ScriptName))
+			mustWrite(file, make([]byte, 8-len(theBrain.ScriptName)))
+		} else {
+			mustWrite(file, theBrain.pedOrObject)
+		}
+	}
+
+	mustWrite(file, block.MissionInfo)
+	mustWrite(file, block.Arrays)
+	mustWrite(file, block.Values)
+
+	if /* is mobile */ true {
+		mustWrite(file, block.SaveGameStateType)
+	}
+
+	for _, theScript := range block.Running.RunningScripts {
+		mustWrite(file, theScript.Index)
+
+		if /* is mobile */ true {
+			mustWrite(file, theScript.StreamedScriptIndex)
+		}
+
+		if theScript.Index&0x8000 != 0 {
+			mustWrite(file, theScript.Mission.MissionCode)
+			mustWrite(file, theScript.Mission.Locals)
+		}
+
+		mustWrite(file, theScript.Link)
+		mustWrite(file, ([]byte)(theScript.Name))
+		mustWrite(file, make([]byte, 8-len(theScript.Name)))
+		mustWrite(file, theScript.Execution)
+		mustWrite(file, theScript.Locals)
+		mustWrite(file, theScript.Timers)
+		mustWrite(file, theScript.Info)
+	}
+}
+
 func ReadScriptBlock(file *os.File) scriptBlock {
 	block := scriptBlock{}
 
@@ -236,8 +286,6 @@ func ReadScriptBlock(file *os.File) scriptBlock {
 	// Size is in bytes, so divide by 4 to find the number of uint32s.
 	block.GlobalStorage.Globals = make([]uint32, block.GlobalStorage.GlobalSpaceSize/4)
 	mustRead(file, &block.GlobalStorage.Globals)
-
-	// mustRead(file, &block.Brains)
 
 	for i := range block.Brains {
 		block.Brains[i] = readBrain(file)
