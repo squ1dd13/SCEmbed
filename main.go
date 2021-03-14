@@ -17,8 +17,10 @@ func main() {
 		panic(err)
 	}
 
-	block0 := save.ReadVarBlock(file)
-	scripts := save.ReadScriptBlock(file)
+	platform := save.NewGamePlatform(file)
+
+	block0 := save.ReadVarBlock(&platform, file)
+	scripts := save.ReadScriptBlock(&platform, file)
 
 	// 60028 is the lower bound for expanded sizes on all platforms.
 	const expandedByteCount uint32 = 60028
@@ -62,8 +64,8 @@ func main() {
 
 	buffer := bytes.NewBuffer(make([]byte, 0, 195_000))
 
-	save.WriteVarBlock(buffer, &block0)
-	save.WriteScriptBlock(buffer, &scripts)
+	save.WriteVarBlock(&platform, buffer, &block0)
+	save.WriteScriptBlock(&platform, buffer, &scripts)
 
 	// Copy the remaining data from the input file to the output buffer.
 	readBuffer := make([]byte, 512)
@@ -86,7 +88,7 @@ func main() {
 		}
 	}
 
-	finalBytes := buffer.Bytes()[:195_000-4]
+	finalBytes := buffer.Bytes()[:buffer.Len()-4]
 
 	var checksum uint32 = 0
 	for _, value := range finalBytes {

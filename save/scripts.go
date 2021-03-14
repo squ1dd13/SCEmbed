@@ -117,11 +117,11 @@ type script struct {
 	}
 }
 
-func readScript(file *os.File) script {
+func readScript(platform *GamePlatform, file *os.File) script {
 	theScript := script{}
 	mustRead(file, &theScript.Index)
 
-	if /* is mobile */ true {
+	if platform.IsMobile {
 		mustRead(file, &theScript.StreamedScriptIndex)
 	}
 
@@ -143,11 +143,7 @@ func readScript(file *os.File) script {
 
 	mustRead(file, &theScript.Execution)
 
-	if /* is mobile */ true {
-		theScript.Locals = make([]uint32, 40)
-	} else {
-		theScript.Locals = make([]uint32, 32)
-	}
+	theScript.Locals = make([]uint32, platform.MaxLocals())
 
 	mustRead(file, &theScript.Locals)
 	mustRead(file, &theScript.Timers)
@@ -155,18 +151,6 @@ func readScript(file *os.File) script {
 
 	return theScript
 }
-
-const (
-	mainSizePcV1      uint32 = 0x2F662
-	mainSizePcV2      uint32 = 0x2F64D
-	mainSizePs2V1     uint32 = 0x2FF1B
-	mainSizePs2v2     uint32 = 0x2FFEA
-	mainSizeMobile    uint32 = 0x40065
-	mainSizeTTDISA    uint32 = 0x3003C
-	mainSizeAllInOne  uint32 = 0x30D39
-	mainSizeHotCoffee uint32 = 0x2FF1B
-	mainSizePs2Japan  uint32 = 0x2FC86
-)
 
 type scriptBlock struct {
 	blockIdentifier [5]uint8
@@ -227,13 +211,7 @@ type scriptBlock struct {
 		RunningScripts []script
 	}
 
-	// Not part of the
-
 	// There is more to the block, but we don't need any of it.
-}
-
-func (block *scriptBlock) AddScript(name string, code []byte) {
-
 }
 
 func (block *scriptBlock) ScriptAt(index int) *script {
@@ -256,7 +234,7 @@ func (block *scriptBlock) ExpandGlobalSpace(variableCount int) {
 	block.GlobalStorage.Globals[1] = (block.GlobalStorage.Globals[1] & 0xff000000) | (block.GlobalStorage.GlobalSpaceSize >> 8)
 }
 
-func WriteScriptBlock(file io.Writer, block *scriptBlock) {
+func WriteScriptBlock(platform *GamePlatform, file io.Writer, block *scriptBlock) {
 	mustWrite(file, block.blockIdentifier)
 	mustWrite(file, block.GlobalStorage.GlobalSpaceSize)
 	mustWrite(file, block.GlobalStorage.Globals)
@@ -276,14 +254,14 @@ func WriteScriptBlock(file io.Writer, block *scriptBlock) {
 	mustWrite(file, block.Arrays)
 	mustWrite(file, block.Values)
 
-	if /* is mobile */ true {
+	if platform.IsMobile {
 		mustWrite(file, block.SaveGameStateType)
 	}
 
 	for _, theScript := range block.Running.RunningScripts {
 		mustWrite(file, theScript.Index)
 
-		if /* is mobile */ true {
+		if platform.IsMobile {
 			mustWrite(file, theScript.StreamedScriptIndex)
 		}
 
@@ -302,7 +280,7 @@ func WriteScriptBlock(file io.Writer, block *scriptBlock) {
 	}
 }
 
-func ReadScriptBlock(file *os.File) scriptBlock {
+func ReadScriptBlock(platform *GamePlatform, file *os.File) scriptBlock {
 	block := scriptBlock{}
 
 	mustRead(file, &block.blockIdentifier)
@@ -325,16 +303,14 @@ func ReadScriptBlock(file *os.File) scriptBlock {
 	mustRead(file, &block.Arrays.ScriptAssignments)
 	mustRead(file, &block.Values)
 
-	if /* is mobile */ true {
+	if platform.IsMobile {
 		mustRead(file, &block.SaveGameStateType)
 	}
 
 	block.Running.RunningScripts = make([]script, block.Values.RunningScriptCount)
 	for i := range block.Running.RunningScripts {
-		block.Running.RunningScripts[i] = readScript(file) //emptyScript()
+		block.Running.RunningScripts[i] = readScript(platform, file)
 	}
-
-	// mustRead(file, &block.Running.RunningScripts)
 
 	return block
 }

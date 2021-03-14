@@ -3,7 +3,6 @@ package save
 import (
 	"io"
 	"os"
-	"strings"
 	"unicode/utf16"
 )
 
@@ -157,11 +156,12 @@ type varBlock struct {
 	MobileUnknown [4]uint8
 }
 
-func WriteVarBlock(file io.Writer, block *varBlock) {
+func WriteVarBlock(platform *GamePlatform, file io.Writer, block *varBlock) {
 	mustWrite(file, block.blockIdentifier)
 	mustWrite(file, block.Metadata.VersionNumber)
 
-	if /* on mobile */ true {
+	if platform.IsWideChar {
+		// UTF-16
 		missionRunes := []rune(block.Metadata.LastMissionPassed)
 		encoded := utf16.Encode(missionRunes)
 
@@ -170,7 +170,11 @@ func WriteVarBlock(file io.Writer, block *varBlock) {
 		// Pad to 100 characters long.
 		mustWrite(file, make([]uint16, 100-len(encoded)))
 	} else {
-		println("aaaa")
+		// UTF-8
+		encoded := []byte(block.Metadata.LastMissionPassed)
+
+		mustWrite(file, encoded)
+		mustWrite(file, make([]uint8, 100-len(encoded)))
 	}
 
 	mustWrite(file, block.Metadata.MissionPackGame)
@@ -189,40 +193,44 @@ func WriteVarBlock(file io.Writer, block *varBlock) {
 	mustWrite(file, block.UnknownBuffer)
 	mustWrite(file, block.CinematicCamera)
 
-	if /* on desktop */ false {
+	if platform.IsPC {
 		mustWrite(file, block.TimeGroup.DesktopSystemTime)
 		mustWrite(file, block.TimeGroup.DesktopUnknown)
-	} else if /* on mobile */ true {
+	} else if platform.IsMobile {
 		mustWrite(file, block.TimeGroup.MobileUnknown)
-	} else if /* on PS2 */ false {
+	} else if platform.IsPS2 {
 		mustWrite(file, block.TimeGroup.PlaystationUnknown)
-	} else {
-		// What?
 	}
 
 	mustWrite(file, block.Gui)
 	mustWrite(file, block.Cheats)
-	mustWrite(file, block.MobileUnknown)
+
+	if platform.IsMobile {
+		mustWrite(file, block.MobileUnknown)
+	}
 }
 
-func ReadVarBlock(file *os.File) varBlock {
+func ReadVarBlock(platform *GamePlatform, file *os.File) varBlock {
 	block := varBlock{}
 
 	mustRead(file, &block.blockIdentifier)
 	mustRead(file, &block.Metadata.VersionNumber)
 
-	// For mobile, the characters are 2 bytes each.
-	if /* on mobile */ true {
+	if platform.IsWideChar {
 		characters := make([]uint16, 100)
 		mustRead(file, &characters)
 
 		missionRunes := utf16.Decode(characters)
-		missionString := string(missionRunes)
 
-		// Split after the null terminator.
-		index := strings.IndexRune(missionString, '\x00')
-		block.Metadata.LastMissionPassed = missionString[:index]
+		block.Metadata.LastMissionPassed = string(missionRunes)
+	} else {
+		characters := make([]uint8, 100)
+		mustRead(file, &characters)
+
+		block.Metadata.LastMissionPassed = string(characters)
 	}
+
+	nullTerminate(&block.Metadata.LastMissionPassed)
 
 	mustRead(file, &block.Metadata.MissionPackGame)
 	mustRead(file, &block.Metadata.Gap)
@@ -240,22 +248,21 @@ func ReadVarBlock(file *os.File) varBlock {
 	mustRead(file, &block.UnknownBuffer)
 	mustRead(file, &block.CinematicCamera)
 
-	if /* on desktop */ false {
+	if platform.IsPC {
 		mustRead(file, &block.TimeGroup.DesktopSystemTime)
 		mustRead(file, &block.TimeGroup.DesktopUnknown)
-	} else if /* on mobile */ true {
+	} else if platform.IsMobile {
 		mustRead(file, &block.TimeGroup.MobileUnknown)
-	} else if /* on PS2 */ false {
+	} else if platform.IsPS2 {
 		mustRead(file, &block.TimeGroup.PlaystationUnknown)
-	} else {
-		// What?
 	}
 
 	mustRead(file, &block.Gui)
 	mustRead(file, &block.Cheats)
-	mustRead(file, &block.MobileUnknown)
 
-	println("Read var block")
+	if platform.IsMobile {
+		mustRead(file, &block.MobileUnknown)
+	}
 
 	return block
 }
