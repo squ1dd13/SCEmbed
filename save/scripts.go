@@ -227,7 +227,33 @@ type scriptBlock struct {
 		RunningScripts []script
 	}
 
+	// Not part of the
+
 	// There is more to the block, but we don't need any of it.
+}
+
+func (block *scriptBlock) AddScript(name string, code []byte) {
+
+}
+
+func (block *scriptBlock) ScriptAt(index int) *script {
+	return &block.Running.RunningScripts[index]
+}
+
+// Extends the global storage to a size big enough to store `variableCount` variables.
+func (block *scriptBlock) ExpandGlobalSpace(variableCount int) {
+	// Update the global storage size.
+	block.GlobalStorage.GlobalSpaceSize = uint32(variableCount) * 4
+
+	// Extend the global variable slice.
+	extendCount := variableCount - len(block.GlobalStorage.Globals)
+	block.GlobalStorage.Globals = append(block.GlobalStorage.Globals, make([]uint32, extendCount)...)
+
+	// Add the size into the first two globals.
+	// [0] stores the lowest order byte in its highest order byte, and the other three bytes are in the lowest three of [1].
+	// There's probably a shorter way of writing these lines, but I CBA to think about it.
+	block.GlobalStorage.Globals[0] = (block.GlobalStorage.Globals[0] & 0x00ffffff) | (block.GlobalStorage.GlobalSpaceSize << 24)
+	block.GlobalStorage.Globals[1] = (block.GlobalStorage.Globals[1] & 0xff000000) | (block.GlobalStorage.GlobalSpaceSize >> 8)
 }
 
 func WriteScriptBlock(file io.Writer, block *scriptBlock) {
