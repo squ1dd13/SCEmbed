@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"gtasave/save"
+	"gta_save/save"
 	"io"
 	"os"
+	"path"
 )
 
 // This should be split up into a bunch of more flexible functions (or methods?) in the future.
 // Currently this is just experimental.
 func doEmbedding(input *os.File, output *os.File) {
 	platform := save.NewGamePlatform(input)
+	fmt.Printf("Detected platform: %s\n", platform.ToString())
 
 	block0 := save.ReadVarBlock(&platform, input)
 	scripts := save.ReadScriptBlock(&platform, input)
@@ -23,7 +25,7 @@ func doEmbedding(input *os.File, output *os.File) {
 	oldSpace := scripts.GlobalByteCount()
 	addedSpace := expandedByteCount - oldSpace
 
-	fmt.Printf("Adding %d bytes to global store.", addedSpace)
+	fmt.Printf("Adding %d bytes to global store.\n", addedSpace)
 	scripts.ExpandGlobalSpace(int(expandedByteCount) / 4)
 
 	scriptBytes := []byte{
@@ -119,7 +121,8 @@ func main() {
 	arguments := os.Args[1:]
 
 	if len(arguments) != 2 {
-		fmt.Printf("Usage: '%s <path to save> <destination for modded save>'\n", os.Args[0])
+		fileName := path.Base(os.Args[0])
+		fmt.Printf("Usage: '%s <path to save> <destination for modded save>'\n", fileName)
 		os.Exit(1)
 	}
 

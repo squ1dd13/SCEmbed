@@ -64,6 +64,22 @@ func (platform *GamePlatform) MaxLocals() int {
 	return 32
 }
 
+func (platform *GamePlatform) ToString() string {
+	if platform.IsMobile {
+		return "Mobile"
+	}
+
+	if platform.IsPC {
+		return "PC"
+	}
+
+	if platform.IsPS2 {
+		return "PS2"
+	}
+
+	return "Unknown"
+}
+
 // Makes it clearer that a field is just padding.
 type padding uint8
 
