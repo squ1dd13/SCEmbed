@@ -54,6 +54,29 @@ func readBrain(file *os.File) brain {
 	return theBrain
 }
 
+type ModelReplacement struct {
+	Type       uint32
+	Handle     uint32
+	NewModelId int32
+	OldModelId int32
+}
+
+type InvisibleObject struct {
+	Type   uint32
+	Handle uint32
+}
+
+type LodAssignment struct {
+	ObjectHandle uint32
+	LodHandle    uint32
+}
+
+type ScriptAssignment struct {
+	ActorModelId uint32
+	ScriptName   [8]uint8
+	Unknown      [2]uint32
+}
+
 type script struct {
 	Index uint16
 
@@ -152,6 +175,9 @@ func readScript(platform *GamePlatform, file *os.File) script {
 	return theScript
 }
 
+// The script block. Split up into multiple sub-structures in order to make reading/writing
+// easier. (You can do a bunch of fields at a time. Fields that need different handling are
+// separate.)
 type scriptBlock struct {
 	blockIdentifier [5]uint8
 
@@ -168,30 +194,11 @@ type scriptBlock struct {
 	}
 
 	Arrays struct {
-		StaticReplacements [25]struct {
-			Type       uint32
-			Handle     uint32
-			NewModelId int32
-			OldModelId int32
-		}
-
-		InvisibleObjects [20]struct {
-			Type   uint32
-			Handle uint32
-		}
-
+		StaticReplacements      [25]ModelReplacement
+		InvisibleObjects        [20]InvisibleObject
 		SuppressedVehicleModels [20]uint32
-
-		LodAssignments [10]struct {
-			ObjectHandle uint32
-			LodHandle    uint32
-		}
-
-		ScriptAssignments [8]struct {
-			ActorModelId uint32
-			ScriptName   [8]uint8
-			Unknown      [2]uint32
-		}
+		LodAssignments          [10]LodAssignment
+		ScriptAssignments       [8]ScriptAssignment
 	}
 
 	Values struct {
@@ -216,6 +223,14 @@ type scriptBlock struct {
 
 func (block *scriptBlock) ScriptAt(index int) *script {
 	return &block.Running.RunningScripts[index]
+}
+
+func (block *scriptBlock) GlobalByteCount() uint32 {
+	return block.GlobalStorage.GlobalSpaceSize
+}
+
+func (block *scriptBlock) GlobalVariables() []uint32 {
+	return block.GlobalStorage.Globals
 }
 
 // Extends the global storage to a size big enough to store `variableCount` variables.

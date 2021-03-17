@@ -9,24 +9,18 @@ import (
 	"os"
 )
 
-func main() {
-	file, err := os.OpenFile(os.Args[1], os.O_RDONLY, 0755)
-	defer file.Close()
+// This should be split up into a bunch of more flexible functions (or methods?) in the future.
+// Currently this is just experimental.
+func doEmbedding(input *os.File, output *os.File) {
+	platform := save.NewGamePlatform(input)
 
-	if err != nil {
-		panic(err)
-	}
+	block0 := save.ReadVarBlock(&platform, input)
+	scripts := save.ReadScriptBlock(&platform, input)
 
-	platform := save.NewGamePlatform(file)
-
-	block0 := save.ReadVarBlock(&platform, file)
-	scripts := save.ReadScriptBlock(&platform, file)
-
-	// 60028 is the lower bound for expanded sizes on all platforms.
-	const expandedByteCount uint32 = 60028
+	const expandedByteCount = 60000
 
 	// Calculate the space we're adding so we know how much we have to play with.
-	oldSpace := scripts.GlobalStorage.GlobalSpaceSize
+	oldSpace := scripts.GlobalByteCount()
 	addedSpace := expandedByteCount - oldSpace
 
 	fmt.Printf("Adding %d bytes to global store.", addedSpace)
@@ -62,7 +56,15 @@ func main() {
 		scripts.GlobalStorage.Globals[globalIndex] = globalValue
 	}
 
-	buffer := bytes.NewBuffer(make([]byte, 0, 195_000))
+	targetLength := 195000
+
+	if platform.IsPC {
+		targetLength = 202752
+	}
+
+	// TODO: Target length for PS2 platform.
+
+	buffer := bytes.NewBuffer(make([]byte, 0, targetLength))
 
 	save.WriteVarBlock(&platform, buffer, &block0)
 	save.WriteScriptBlock(&platform, buffer, &scripts)
@@ -71,7 +73,7 @@ func main() {
 	readBuffer := make([]byte, 512)
 
 	for {
-		read, err := file.Read(readBuffer)
+		read, err := input.Read(readBuffer)
 
 		if read == 0 {
 			break
@@ -88,7 +90,13 @@ func main() {
 		}
 	}
 
-	finalBytes := buffer.Bytes()[:buffer.Len()-4]
+	length := buffer.Len()
+
+	if platform.IsPC {
+		length = targetLength
+	}
+
+	finalBytes := buffer.Bytes()[:length-4]
 
 	var checksum uint32 = 0
 	for _, value := range finalBytes {
@@ -100,20 +108,38 @@ func main() {
 
 	finalBytes = append(finalBytes, checksumBytes...)
 
-	outFile, err := os.OpenFile(
-		os.Args[1]+".modded",
-		os.O_WRONLY|os.O_TRUNC|os.O_CREATE,
-		0755)
-
-	defer outFile.Close()
+	_, err := output.Write(finalBytes)
 
 	if err != nil {
 		panic(err)
 	}
+}
 
-	_, err = outFile.Write(finalBytes)
+func main() {
+	arguments := os.Args[1:]
+
+	if len(arguments) != 2 {
+		fmt.Printf("Usage: '%s <path to save> <destination for modded save>'\n", os.Args[0])
+		os.Exit(1)
+	}
+
+	inputFile, err := os.OpenFile(arguments[0], os.O_RDONLY, 0755)
 
 	if err != nil {
-		panic(err)
+		println("Error opening input file. Please check the path and try again.")
+		os.Exit(1)
 	}
+
+	defer inputFile.Close()
+
+	outputFile, err := os.OpenFile(arguments[1], os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0755)
+
+	if err != nil {
+		println("Error opening output file. Please check the path and that the destination is writeable.")
+		os.Exit(1)
+	}
+
+	defer outputFile.Close()
+
+	doEmbedding(inputFile, outputFile)
 }
