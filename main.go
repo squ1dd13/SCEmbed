@@ -38,25 +38,11 @@ func doEmbedding(input *os.File, output *os.File) {
 		// play_music mission_complete
 		0x94, 0x03, 0x04, 0x02,
 
-		// jump (without destination; we have to add that)
-		0x02, 0x00, 0x01 /* destination --> */, 0x0, 0x0, 0x0, 0x0,
+		// end_thread
+		0x4e, 0x00,
 	}
 
-	binary.LittleEndian.PutUint32(scriptBytes[len(scriptBytes)-4:], scripts.ScriptAt(1).Info.RelativeInstructionPointer)
-
-	// Very inefficient...
-	for len(scriptBytes)%4 != 0 {
-		scriptBytes = append(scriptBytes, 0)
-	}
-
-	scripts.ScriptAt(1).Info.RelativeInstructionPointer = oldSpace
-
-	for i := 0; i < len(scriptBytes); i += 4 {
-		globalValue := binary.LittleEndian.Uint32(scriptBytes[i : i+4])
-
-		globalIndex := (int(oldSpace) + i) / 4
-		scripts.GlobalStorage.Globals[globalIndex] = globalValue
-	}
+	scripts.AddScript(&platform, &block0, "embed", scriptBytes, oldSpace)
 
 	targetLength := 195000
 
@@ -94,7 +80,11 @@ func doEmbedding(input *os.File, output *os.File) {
 
 	length := buffer.Len()
 
-	if platform.IsPC {
+	// TODO: Review this
+	if platform.IsPC || (platform.IsMobile && length > targetLength) {
+		println("Warning: Removing bytes from end of save to restrict length. " +
+			"This will likely cause issues if these bytes are not padding.")
+
 		length = targetLength
 	}
 

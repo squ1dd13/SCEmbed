@@ -1,6 +1,7 @@
 package save
 
 import (
+	"encoding/binary"
 	"io"
 	"os"
 )
@@ -81,7 +82,7 @@ type script struct {
 	Index uint16
 
 	// Mobile only.
-	StreamedScriptIndex uint32
+	StreamedScriptIndex int32
 
 	Mission struct {
 		// 69000 bytes. We don't use [69000]uint8 though, because this may not be
@@ -247,6 +248,48 @@ func (block *scriptBlock) ExpandGlobalSpace(variableCount int) {
 	// There's probably a shorter way of writing these lines, but I CBA to think about it.
 	block.GlobalStorage.Globals[0] = (block.GlobalStorage.Globals[0] & 0x00ffffff) | (block.GlobalStorage.GlobalSpaceSize << 24)
 	block.GlobalStorage.Globals[1] = (block.GlobalStorage.Globals[1] & 0xff000000) | (block.GlobalStorage.GlobalSpaceSize >> 8)
+}
+
+func (block *scriptBlock) AddScript(platform *GamePlatform, vars *varBlock, name string, contents []byte, position uint32) {
+	for i := 0; i < len(contents); i += 4 {
+		availableCount := len(contents) - i
+
+		if availableCount > 4 {
+			availableCount = 4
+		}
+
+		variableBytes := make([]byte, 4)
+
+		// Only copy in as many bytes as we have available. Any bytes we don't fill
+		//  will be zero, so the result is the same as if the source was padded to
+		//  a multiple of 4.
+		copy(variableBytes, contents[i:i+availableCount])
+
+		globalValue := binary.LittleEndian.Uint32(variableBytes)
+
+		// Divide by 4 to obtain the index of the variable which will hold these bytes.
+		globalIndex := (int(position) + i) / 4
+		block.GlobalStorage.Globals[globalIndex] = globalValue
+	}
+
+	theScript := script{
+		Index:               0,
+		StreamedScriptIndex: -1,
+		Name:                name,
+		Locals:              make([]uint32, platform.MaxLocals()),
+	}
+
+	theScript.Info.IsActive = true
+	theScript.Info.AttachType = attachNotInUse
+	theScript.Info.RelativeInstructionPointer = position
+
+	// Set the activation time to the game time so that the script launches
+	//  straight away.
+	theScript.Info.ActivationTime = vars.TimeMapping.TimeInMilliseconds
+
+	// Add the script to the end of the array.
+	block.Running.RunningScripts = append(block.Running.RunningScripts, theScript)
+	block.Values.RunningScriptCount++
 }
 
 func WriteScriptBlock(platform *GamePlatform, file io.Writer, block *scriptBlock) {
