@@ -6,10 +6,10 @@ All credit for the research into embedding scripts goes to OrionSR over at GTAFo
 ## Usage
 You can use the tool as follows:
 ```
-/path/to/binary <input save> <modded output save>
+/path/to/binary <input save> <script> <modded output save>
 ```
 
 For example:
 ```shell
-embed-linux-amd64 "~/Documents/GTA San Andreas User Files/GTASAsf1.b" "~/Documents/GTA San Andreas User Files/GTASAsf2.b"
+embed-linux-amd64 "~/Documents/GTA San Andreas User Files/GTASAsf1.b" "~/path/to/script.cs" "~/Documents/GTA San Andreas User Files/GTASAsf2.b"
 ```
