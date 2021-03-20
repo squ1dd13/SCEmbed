@@ -8,11 +8,70 @@ import (
 	"io"
 	"os"
 	"path"
+
+	"github.com/Squ1dd13/scm"
 )
+
+func translateOffsets(codeBytes []byte, byteOffset uint32) {
+	reader := bytes.NewReader(codeBytes)
+
+	getByteIndex := func() int64 {
+		value, _ := reader.Seek(0, io.SeekCurrent)
+		return value
+	}
+
+	// Disassemble each instruction so we can check if we need to patch them.
+	for reader.Len() != 0 {
+		instructionIndex := getByteIndex()
+		instruction := scm.ReadInstruction(reader)
+
+		if instruction == nil {
+			println("Bad instruction, stopping.")
+			break
+		}
+
+		const (
+			jumpOpcode           = 0x0002
+			falseJumpOpcode      = 0x004d
+			callOpcode           = 0x0050
+			switchOpcode         = 0x0871
+			switchContinueOpcode = 0x0872
+		)
+
+		// TODO: Patch switches.
+
+		switch instruction.Opcode {
+		case jumpOpcode, falseJumpOpcode, callOpcode:
+			{
+				// Offset by 3 to skip past the opcode and type byte, then end at +7 after 4 bytes.
+				addressSlice := codeBytes[instructionIndex+3 : instructionIndex+7]
+
+				addressBuffer := bytes.NewBuffer(addressSlice)
+
+				var address int32
+				err := binary.Read(addressBuffer, binary.LittleEndian, &address)
+
+				if err != nil {
+					fmt.Printf("Failed to read address for jump/call at %d: %v\n", instructionIndex, err)
+					continue
+				}
+
+				address *= -1
+
+				if int(address) < len(codeBytes) {
+					address += int32(byteOffset)
+
+					addressBuffer.Reset()
+					binary.Write(addressBuffer, binary.LittleEndian, &address)
+				}
+			}
+		}
+	}
+}
 
 // This should be split up into a bunch of more flexible functions (or methods?) in the future.
 // Currently this is just experimental.
-func doEmbedding(input *os.File, output *os.File) {
+func doEmbedding(input *os.File, scriptBytes []byte, output *os.File) {
 	platform := save.NewGamePlatform(input)
 	fmt.Printf("Detected platform: %s\n", platform.ToString())
 
@@ -28,19 +87,8 @@ func doEmbedding(input *os.File, output *os.File) {
 	fmt.Printf("Adding %d bytes to global store.\n", addedSpace)
 	scripts.ExpandGlobalSpace(int(expandedByteCount) / 4)
 
-	scriptBytes := []byte{
-		// wait 4000 ms
-		0x01, 0x00, 0x05, 0xA0, 0x0F,
-
-		// show_text_styled GXT 'FESZ_LS' time 4000 style 4
-		0xBA, 0x00, 0x09, 0x46, 0x45, 0x53, 0x5A, 0x5F, 0x4C, 0x53, 0x00, 0x05, 0xA0, 0x0F, 0x04, 0x04,
-
-		// play_music mission_complete
-		0x94, 0x03, 0x04, 0x02,
-
-		// end_thread
-		0x4e, 0x00,
-	}
+	// Translate jumps to match the embedded location.
+	translateOffsets(scriptBytes, oldSpace)
 
 	scripts.AddScript(&platform, &block0, "embed", scriptBytes, oldSpace)
 
@@ -112,7 +160,7 @@ func main() {
 
 	if len(arguments) != 2 {
 		fileName := path.Base(os.Args[0])
-		fmt.Printf("Usage: '%s <path to save> <destination for modded save>'\n", fileName)
+		fmt.Printf("Usage: '%s <path to save file> <path to script> <destination for modded save file>'\n", fileName)
 		os.Exit(1)
 	}
 
@@ -125,7 +173,14 @@ func main() {
 
 	defer inputFile.Close()
 
-	outputFile, err := os.OpenFile(arguments[1], os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0755)
+	scriptBytes, err := os.ReadFile(arguments[1])
+
+	if err != nil {
+		println("Error opening script file. Please check the path and try again.")
+		os.Exit(1)
+	}
+
+	outputFile, err := os.OpenFile(arguments[2], os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0755)
 
 	if err != nil {
 		println("Error opening output file. Please check the path and that the destination is writeable.")
@@ -134,5 +189,5 @@ func main() {
 
 	defer outputFile.Close()
 
-	doEmbedding(inputFile, outputFile)
+	doEmbedding(inputFile, scriptBytes, outputFile)
 }
