@@ -56,14 +56,12 @@ func translateOffsets(codeBytes []byte, byteOffset uint32) {
 					continue
 				}
 
-				address *= -1
+				address = -address + int32(byteOffset)
 
-				if int(address) < len(codeBytes) {
-					address += int32(byteOffset)
+				addressBuffer.Reset()
+				binary.Write(addressBuffer, binary.LittleEndian, &address)
 
-					addressBuffer.Reset()
-					binary.Write(addressBuffer, binary.LittleEndian, &address)
-				}
+				println("Patched")
 			}
 		}
 	}
@@ -158,7 +156,7 @@ func doEmbedding(input *os.File, scriptBytes []byte, output *os.File) {
 func main() {
 	arguments := os.Args[1:]
 
-	if len(arguments) != 2 {
+	if len(arguments) != 3 {
 		fileName := path.Base(os.Args[0])
 		fmt.Printf("Usage: '%s <path to save file> <path to script> <destination for modded save file>'\n", fileName)
 		os.Exit(1)
